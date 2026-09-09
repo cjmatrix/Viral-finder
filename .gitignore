@@ -1,0 +1,112 @@
+# =================
+# Python / FastAPI
+# =================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.env/
+.venv/
+
+# =================
+# Node / Express / React TS
+# =================
+node_modules/
+jspm_packages/
+*.tgz
+.yarn-integrity
+.pnp
+.pnp.js
+
+# Production / Build Output
+/build/
+/dist/
+.tsbuildinfo
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.eslintcache
+.stylelintcache
+
+# =================
+# Environment & Secrets (All Stacks)
+# =================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# =================
+# Generated Media / Large Files
+# =================
+backend/clips/
+backend/downloads/
+backend/temp/
+*.mp4
+*.mp3
+*.ass
+*.part
+
+# =================
+# Editors & OS
+# =================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
