@@ -12,7 +12,7 @@ function App() {
   const [selectedClipIndex, setSelectedClipIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const handleSearch = async (searchUrl, strategy) => {
+  const handleSearch = async (searchUrl, strategy, clipCount = 4) => {
     setUrl(searchUrl);
     setLoading(true);
     setLoadingStage('Fetching transcript...');
@@ -21,12 +21,12 @@ function App() {
     try {
       // Fake staging updates for UI since backend doesn't do SSE by default
       setTimeout(() => setLoadingStage('Scoring chunks with Flash LLM...'), 3000);
-      setTimeout(() => setLoadingStage('Refining Top 4 viral moments with Primary LLM...'), 8000);
+      setTimeout(() => setLoadingStage(`Refining Top ${clipCount} viral moments with Primary LLM...`), 8000);
 
       const response = await fetch('http://localhost:5000/api/analyze-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: searchUrl, strategy })
+        body: JSON.stringify({ url: searchUrl, strategy, clipCount })
       });
 
       if (!response.ok) {

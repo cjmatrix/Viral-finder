@@ -67,9 +67,21 @@ const getTrackingData = async (videoPath) => {
 };
 
 /**
+ * Helper to format seconds to ASS timestamp format (H:MM:SS.CS)
+ */
+const formatTimeASS = (seconds) => {
+    const d = new Date(seconds * 1000);
+    const hrs = String(d.getUTCHours());
+    const mins = String(d.getUTCMinutes()).padStart(2, '0');
+    const secs = String(d.getUTCSeconds()).padStart(2, '0');
+    const cs = String(Math.floor(d.getUTCMilliseconds() / 10)).padStart(2, '0');
+    return `${hrs}:${mins}:${secs}.${cs}`;
+};
+
+/**
  * Generate ASS file for a clip (Animated CapCut style)
  */
-const generateASS = (transcript, clipStartTime, clipEndTime, outputPath) => {
+const generateASS = (transcript, clipStartTime, clipEndTime, outputPath, strategy = 'standard') => {
     if (!transcript) return;
     
     const items = transcript.filter(item => {
@@ -91,15 +103,6 @@ Style: Default,Arial,90,&H0000FFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
-
-    const formatTimeASS = (seconds) => {
-        const d = new Date(seconds * 1000);
-        const hrs = String(d.getUTCHours());
-        const mins = String(d.getUTCMinutes()).padStart(2, '0');
-        const secs = String(d.getUTCSeconds()).padStart(2, '0');
-        const cs = String(Math.floor(d.getUTCMilliseconds() / 10)).padStart(2, '0');
-        return `${hrs}:${mins}:${secs}.${cs}`;
-    };
 
     const fixedItems = items.map((item, i) => {
         let start = item.offset / 1000;
@@ -130,11 +133,83 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const startStr = formatTimeASS(chunkStart);
                 const endStr = formatTimeASS(chunkEnd);
                 
-                const textWithAnim = `{\\pos(540,960)\\an5\\fscx50\\fscy50\\t(0,100,\\fscx100\\fscy100)\\fad(50,50)}${chunkWords}`;
+                const yPos = strategy === 'split-screen' ? 576 : 960;
+                const textWithAnim = `{\\pos(540,${yPos})\\an5\\fscx50\\fscy50\\t(0,100,\\fscx100\\fscy100)\\fad(50,50)}${chunkWords}`;
                 assContent += `Dialogue: 0,${startStr},${endStr},Default,,0,0,0,,${textWithAnim}\n`;
             }
         }
     });
+
+    fs.writeFileSync(outputPath, assContent);
+};
+
+/**
+ * Generates an .ass subtitle file correctly mapped to a multi-segment timeline for Story Mode
+ */
+const generateStoryASS = (transcript, segments, outputPath) => {
+    let assContent = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,90,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+    let videoOffset = 0; // Tracks the running time in the concatenated video
+
+    for (let s = 0; s < segments.length; s++) {
+        const seg = segments[s];
+        const segDuration = seg.end_time - seg.start_time;
+
+        // Filter items that belong to this segment
+        const items = transcript.filter(item => {
+            const start = item.offset / 1000;
+            return start >= seg.start_time && start <= seg.end_time;
+        });
+
+        const fixedItems = items.map((item, i) => {
+            let start = item.offset / 1000;
+            let end = start + (item.duration / 1000);
+            
+            if (i < items.length - 1) {
+                const nextStart = items[i + 1].offset / 1000;
+                if (end > nextStart) {
+                    end = nextStart; // Prevent overlap
+                }
+            }
+            return { ...item, start, end };
+        });
+
+        fixedItems.forEach(item => {
+            let relativeStart = Math.max(0, item.start - seg.start_time) + videoOffset;
+            let relativeEnd = Math.min(segDuration, item.end - seg.start_time) + videoOffset;
+
+            if (relativeEnd > relativeStart) {
+                const words = item.text.replace(/\n/g, ' ').trim().split(/\s+/);
+                const chunkDuration = (relativeEnd - relativeStart) / Math.ceil(words.length / 2);
+                
+                for (let i = 0; i < words.length; i += 2) {
+                    const chunkWords = words.slice(i, i + 2).join(' ');
+                    const chunkStart = relativeStart + (i / 2) * chunkDuration;
+                    const chunkEnd = chunkStart + chunkDuration;
+                    
+                    const startStr = formatTimeASS(chunkStart);
+                    const endStr = formatTimeASS(chunkEnd);
+                    
+                    const textWithAnim = `{\\pos(540,960)\\an5\\fscx50\\fscy50\\t(0,100,\\fscx100\\fscy100)\\fad(50,50)}${chunkWords}`;
+                    assContent += `Dialogue: 0,${startStr},${endStr},Default,,0,0,0,,${textWithAnim}\n`;
+                }
+            }
+        });
+
+        // Advance the running time by this segment's duration
+        videoOffset += segDuration;
+    }
 
     fs.writeFileSync(outputPath, assContent);
 };
@@ -175,7 +250,7 @@ const processClip = (videoPath, clip, outputPath, trackingData, uniqueObjects = 
         let subPath = null;
         if (fullTranscript) {
             subPath = path.join(clipsDir, `subs_${Date.now()}_${clip.rank}.ass`);
-            generateASS(fullTranscript, clip.start_time, clip.end_time, subPath);
+            generateASS(fullTranscript, clip.start_time, clip.end_time, subPath, strategy);
         }
 
         // --- GAMEPLAY (SPLIT-SCREEN) ---
@@ -347,9 +422,7 @@ const processStoryClip = async (url, story, outputPath, fullTranscript) => {
         let videoOut = '[vcat]';
         if (fullTranscript && story.segments.length > 0) {
             subPath = path.join(clipsDir, `story_subs_${Date.now()}.ass`);
-            const storyStart = story.segments[0].start_time;
-            const storyEnd = story.segments[story.segments.length - 1].end_time;
-            generateASS(fullTranscript, storyStart, storyEnd, subPath);
+            generateStoryASS(fullTranscript, story.segments, subPath);
             filterComplex.push(`[vcat]subtitles='${subPath}'[vfinal]`);
             videoOut = '[vfinal]';
         }

@@ -4,11 +4,12 @@ import { Search, Loader2 } from 'lucide-react';
 const UrlInput = ({ onSearch, loading, loadingStage }) => {
   const [url, setUrl] = useState('');
   const [strategy, setStrategy] = useState('standard');
+  const [clipCount, setClipCount] = useState(4);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (url.trim()) {
-      onSearch(url.trim(), strategy);
+      onSearch(url.trim(), strategy, clipCount);
     }
   };
 
@@ -46,6 +47,20 @@ const UrlInput = ({ onSearch, loading, loadingStage }) => {
             <option value="standard">Standard Portrait (Crop)</option>
             <option value="split-screen">Split-Screen Gameplay</option>
             <option value="story-mode">🎬 Story Mode (Multi-Segment)</option>
+          </select>
+          
+          <label htmlFor="clipCount" className="font-medium ml-4">How Many:</label>
+          <select 
+            id="clipCount"
+            value={clipCount}
+            onChange={(e) => setClipCount(Number(e.target.value))}
+            disabled={loading}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={2}>2 Clips</option>
+            <option value={4}>4 Clips</option>
+            <option value={6}>6 Clips</option>
+            <option value={8}>8 Clips</option>
           </select>
         </div>
       </form>

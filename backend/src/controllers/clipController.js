@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const analyzeVideo = async (req, res) => {
     try {
-        const { url, strategy } = req.body;
+        const { url, strategy, clipCount = 4 } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: "YouTube URL is required." });
@@ -30,15 +30,15 @@ const analyzeVideo = async (req, res) => {
         }
 
         // 4. Stage 2: Main LLM Re-Ranking & Pacing Trim
-        console.log("Stage 2: Refining top 10 chunks to top 4...");
-        const top4Clips = await refineTopClips(top10Chunks);
+        console.log(`Stage 2: Refining top 10 chunks to top ${clipCount}...`);
+        const topClips = await refineTopClips(top10Chunks, clipCount);
 
         // ============================================================
         // STORY MODE — separate pipeline
         // ============================================================
         if (strategy === 'story-mode') {
-            console.log("Story Mode: Detecting connected story arcs...");
-            const stories = await detectStories(chunks); // Use ALL chunks for story detection
+            console.log(`Story Mode: Detecting ${clipCount} connected story arcs...`);
+            const stories = await detectStories(chunks, clipCount); // Use ALL chunks for story detection
             const finalStoryClips = [];
 
             for (const story of stories) {
@@ -77,28 +77,28 @@ const analyzeVideo = async (req, res) => {
         console.log("Downloading and processing clip sections...");
         const finalClips = [];
 
-        // Apply 10-second padding to all clips upfront
-        for (const clip of top4Clips) {
-            clip.start_time = Math.max(0, clip.start_time - 10);
+        // Apply padding to all clips upfront (3s start, 10s end)
+        for (const clip of topClips) {
+            clip.start_time = Math.max(0, clip.start_time - 3);
             clip.end_time = clip.end_time + 10;
         }
 
         // Pre-fetch first clip's download
         let nextDownloadPromise = (async () => {
-            const clip = top4Clips[0];
+            const clip = topClips[0];
             console.log(`Downloading section for clip ${clip.rank} (${clip.start_time} to ${clip.end_time})...`);
             return downloadVideoSection(url, clip.start_time, clip.end_time);
         })();
 
-        for (let i = 0; i < top4Clips.length; i++) {
-            const clip = top4Clips[i];
+        for (let i = 0; i < topClips.length; i++) {
+            const clip = topClips[i];
 
             // Wait for current clip's download
             const sectionVideoPath = await nextDownloadPromise;
 
             // Immediately kick off next clip's download in the background
-            if (i + 1 < top4Clips.length) {
-                const nextClip = top4Clips[i + 1];
+            if (i + 1 < topClips.length) {
+                const nextClip = topClips[i + 1];
                 nextDownloadPromise = (async () => {
                     console.log(`Downloading section for clip ${nextClip.rank} (${nextClip.start_time} to ${nextClip.end_time})...`);
                     return downloadVideoSection(url, nextClip.start_time, nextClip.end_time);

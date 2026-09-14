@@ -57,7 +57,7 @@ ${chunksData}
                 required: ["chunk_id", "hook_score", "energy_score", "coherence_score", "total_score"]
             }
         };
-
+        //low model
         const response = await ai.models.generateContent({
             model: 'gemini-3.1-flash-lite',
             contents: prompt,
@@ -95,18 +95,20 @@ ${chunksData}
 };
 
 /**
- * Stage 2: Main LLM Re-Ranking & Pacing Trim
- * Refines the top 10 chunks to produce 4 perfect clips.
+ * Stage 2: Refines the top raw chunks into precise, highly viral clips
  */
-const refineTopClips = async (topChunks) => {
+const refineTopClips = async (chunks, clipCount = 4) => {
     try {
-        const chunksData = topChunks.map(c => `[ID: ${c.chunk_id} | Window: ${c.start_time}s - ${c.end_time}s]\nText: ${c.text}`).join('\n\n');
+        const chunksData = chunks.map(c => `[ID: ${c.chunk_id} | ${c.start_time}s - ${c.end_time}s]\n${c.text}`).join('\n\n---\n\n');
         
         const prompt = `
-You are a viral short-form video editor. Your job is to pick the best 2 clips from these 10 candidates and define their EXACT boundaries for a 45-60 second YouTube Short or TikTok.
+You are an expert short-form content editor (TikTok/Reels/Shorts). 
+I am giving you the top most engaging moments from a livestream transcript.
+
+Your job is to select the TOP ${clipCount} ABSOLUTE BEST moments and define the exact start and end times for the final video cut.
 
 ## YOUR OBJECTIVE
-Select 2 clips that will generate maximum watch time, shares, and comments. Prioritize emotional peaks, shocking moments, and strong payoffs.
+Select ${clipCount} clips that will generate maximum watch time, shares, and comments. Prioritize emotional peaks, shocking moments, and strong payoffs.
 
 ## RULES FOR TIMESTAMP SELECTION (CRITICAL)
 - The timestamps you output ARE used directly to cut the video. Be surgically precise.
@@ -134,7 +136,7 @@ ${chunksData}
 
         const responseSchema = {
             type: Type.ARRAY,
-            description: "List of top 2 refined clips",
+            description: `List of top ${clipCount} clips`,
             items: {
                 type: Type.OBJECT,
                 properties: {
@@ -161,7 +163,7 @@ ${chunksData}
                 required: ["rank", "title", "hook", "start_time", "end_time", "virality_score", "reason", "sfx_moments"]
             }
         };
-
+        //high
         const response = await ai.models.generateContent({
             model: 'gemini-3.5-flash',
             contents: prompt,
@@ -194,9 +196,9 @@ module.exports = {
 
 /**
  * Story Mode - Stage 1: Story Detector (Flash LLM)
- * Reads ALL chunks and groups them into 2 connected story arcs.
+ * Reads ALL chunks and groups them into connected story arcs.
  */
-async function detectStories(chunks) {
+async function detectStories(chunks, clipCount = 2) {
     try {
         const chunksData = chunks.map(c => `[ID: ${c.chunk_id} | ${c.start_time}s - ${c.end_time}s]\n${c.text}`).join('\n\n---\n\n');
 
@@ -208,7 +210,7 @@ A "story arc" means: a setup moment + a payoff/reaction moment that happened at 
 - A dare is proposed → accepted → completed/failed reaction is shown
 - A challenge is issued → attempt happens → result and reaction
 
-Find the 2 BEST connected story arcs from these transcript chunks.
+Find the ${clipCount} BEST connected story arcs from these transcript chunks.
 Each story MUST reference at least 2 different chunk IDs (moments that are connected).
 Only include chunks that are genuinely part of the story — don't add filler chunks.
 
@@ -218,7 +220,7 @@ ${chunksData}
 
         const responseSchema = {
             type: Type.ARRAY,
-            description: "List of 2 story arcs",
+            description: `List of ${clipCount} story arcs`,
             items: {
                 type: Type.OBJECT,
                 properties: {
@@ -234,7 +236,7 @@ ${chunksData}
                 required: ["story_id", "title", "description", "chunk_ids"]
             }
         };
-
+        //low model
         const response = await ai.models.generateContent({
             model: 'gemini-3.1-flash-lite',
             contents: prompt,
@@ -270,13 +272,13 @@ You are a viral short-form video editor. You have identified the following conne
 STORY: "${story.title}"
 DESCRIPTION: ${story.description}
 
-Your job is to define the EXACT video segments to cut from each moment and join them together into one 60-120 second short-form video.
+Your job is to define the EXACT video segments to cut from each moment and join them together into one short-form video that is UNDER 60 SECONDS total.
 
 ## RULES FOR SEGMENTS (CRITICAL)
 - Each segment has a start_time and end_time in seconds from the START of the full original video.
 - Segments must be in CHRONOLOGICAL ORDER.
-- Each individual segment should be between 10-45 seconds long.
-- Total video length when all segments are joined must be between 60-120 seconds.
+- Each individual segment should be between 5-30 seconds long.
+- Total video length when all segments are joined MUST BE UNDER 60 SECONDS (ideally 30-59 seconds). This is a strict requirement.
 - start_time of each segment must fall WITHIN its source chunk's window.
 - end_time must fall WITHIN its source chunk's window.
 - Cut in at the exact moment the relevant action/dialogue begins — skip filler words.
@@ -329,7 +331,7 @@ ${chunksData}
             },
             required: ["story_id", "title", "virality_score", "hook", "reason", "segments", "sfx_moments"]
         };
-
+        //high
         const response = await ai.models.generateContent({
             model: 'gemini-3.5-flash',
             contents: prompt,
